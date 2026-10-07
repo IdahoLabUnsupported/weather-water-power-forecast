@@ -1,0 +1,9 @@
+\# Copyright 2025, Battelle Energy Alliance, LLC, ALL RIGHTS RESERVED
+
+openmeteo-requests
+numpy
+pandas
+requests
+requests_cache
+retry_requests
+herbie-data

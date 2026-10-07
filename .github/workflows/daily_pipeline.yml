@@ -1,0 +1,60 @@
+\# Copyright 2025, Battelle Energy Alliance, LLC, ALL RIGHTS RESERVED
+
+name: Daily Forecast Pipeline
+
+on:
+  schedule:
+    # Run once per day at 00:00 UTC
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-forecast-pipeline
+  cancel-in-progress: true
+
+jobs:
+  daily-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch weather data
+        run: |
+          python source_code/weather/openmeteo_call.py
+        continue-on-error: true
+
+      - name: Fetch CONUS weather data (Herbie)
+        run: |
+          python source_code/weather/herbie_preprocessed_conus.py
+        continue-on-error: true
+
+      - name: Fetch CAISO electricity data
+        run: |
+          python source_code/electricity/fetch_caiso_electricity.py
+        continue-on-error: true
+
+      - name: Build interactive map
+        run: |
+          python source_code/map/interactive-map-leaflet.py
+
+      - name: Commit & push results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin
+          git pull origin main || true
+          git add data data_locations.html source_code/water/continuous_forecast_gauges.csv
+          git commit -m "Daily forecast update for $(date -u +'%Y-%m-%d')" || echo "No changes to commit"
+          git push origin HEAD:main || true

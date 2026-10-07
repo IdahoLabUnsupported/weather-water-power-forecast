@@ -1,0 +1,253 @@
+<!-- Copyright 2025, Battelle Energy Alliance, LLC, ALL RIGHTS RESERVED -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>US Forecast Database</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/shpjs@latest/dist/shp.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/calvinmetcalf/leaflet.shapefile@master/leaflet.shpfile.js"></script>
+
+
+    <script src="https://cdn-geoweb.s3.amazonaws.com/esri-leaflet/0.0.1-beta.5/esri-leaflet.js"></script>
+
+    <script src="https://cdn-geoweb.s3.amazonaws.com/esri-leaflet-geocoder/0.0.1-beta.5/esri-leaflet-geocoder.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="https://cdn-geoweb.s3.amazonaws.com/esri-leaflet-geocoder/0.0.1-beta.5/esri-leaflet-geocoder.css">
+
+    
+    <script>
+        var cities = CITIES_DATA_PLACEHOLDER;
+        var gauges = GAUGES_DATA_PLACEHOLDER;
+        // var zones = ZONES_DATA_PLACEHOLDER;
+        var koppenGrid = null;
+        
+        //decompress koppen data
+
+        try {
+            var compressed = 'KOPPEN_COMPRESSED_PLACEHOLDER';
+            var binary = atob(compressed);
+            var bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i);
+            }
+            var decompressed = pako.ungzip(bytes, { to: 'string' });
+            koppenGrid = JSON.parse(decompressed);
+            console.log('koppen loaded:', koppenGrid.length);
+        } catch(e) {
+            console.error('decompress failed:', e);
+        }
+        
+        //highlighted points for the nearest cities
+        var highlighted = [];
+        
+        var map = L.map('map').setView([39.8, -98.6], 4);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+        
+        var cityLayer = L.featureGroup();
+
+        //add city markers
+        cities.forEach(function(city) {
+            L.circleMarker([city.lat, city.lon], {
+                radius: 3,
+                color: 'blue',
+                fillColor: 'blue',
+                fillOpacity: 0.6,
+                weight: 2
+           }).bindPopup('<b> City: ' + city.name +'<br><a href="' + city.url1 + '" target="_blank">View Data</a>').addTo(cityLayer);
+        });
+        
+
+        cityLayer.addTo(map);
+
+        // Add gauge markers
+        var gaugeLayer = L.featureGroup();
+        gauges.forEach(function(g) {
+            L.circleMarker([g.lat, g.lon], {
+                radius: 3,
+                color: 'orange',
+                fillColor: 'orange',
+                fillOpacity: 0.6,
+                weight: 2
+            }).bindPopup('<b>Gauge, State: ' + g.name +'<br><a href="' + g.data_url + '" target="_blank">View Data</a>' +'<br><a href="' + g.url + '" target="_blank">View Gauge Info</a>')
+            .addTo(gaugeLayer);
+        });
+        gaugeLayer.addTo(map);
+
+        var shapefiles = [
+            { path: "source_code/map/MISO_Market_Zones.zip", color: "blue", name: "MISO"},
+            { path: "source_code/map/ercot_load_zones_shp.zip", color: "green", name: "ERCOT"},
+            { path: "source_code/map/spp_market_zones.zip", color: "red", name: "SPP"},
+            { path: "source_code/map/nyiso_load_zones.zip", color: "purple", name: "NYISO"},
+            { path: "source_code/map/NE_load_zones.zip", color: "orange", name: "ISONE"},
+            { path: "source_code/map/pjm_loadzones_shp.zip", color: "yellow", name: "PJM"},
+            { path: "source_code/map/WPP_view.zip", color:"gray", name:"CAISO"}
+        ];
+
+        var zoneGroup = L.layerGroup(); 
+
+        shapefiles.forEach(f => {
+            var layer = new L.Shapefile(f.path, {
+                onEachFeature: function (feature, layer) {
+                    var name = feature.properties.Zone || feature.properties.Zone_Name || feature.properties.ZONE_NAME
+                    || feature.properties.Name || feature.properties.NAME || feature.properties.BA_Abrev || "Unnamed";
+                    layer.bindPopup(`<b>${f.name} Zone:</b> ${name}`);
+                },
+                style: function () {
+                    return { color: f.color, weight: 2, fillOpacity: 0.3 };
+                }
+            });
+            layer.addTo(zoneGroup);
+        });
+
+        zoneGroup.addTo(map);
+        // zoneGroup.bringToBack();
+
+
+        //clear highlights when popup closes
+        map.on('popupclose', function() {
+            highlighted.forEach(m => map.removeLayer(m));
+            highlighted = [];
+        });
+
+        //add a search bar
+        var searchControl = new L.esri.Controls.Geosearch().addTo(map);
+
+
+        //layer control
+        L.control.layers(null, {
+            'Cities': cityLayer,
+            'Water Gauges': gaugeLayer,
+            'Load Zones' : zoneGroup
+        }).addTo(map);
+
+        function haversineDistance(lat1, lon1, lat2, lon2) {
+            var R = 3959;
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLon = (lon2 - lon1) * Math.PI / 180;
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon/2) * Math.sin(dLon/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        function getKoppen(lat, lon) {
+            var minDist = Infinity;
+            var nearest = null;
+            
+            for (var i = 0; i < koppenGrid.length; i++) {
+                var glat = koppenGrid[i].lat;
+                var glon = koppenGrid[i].lon;
+                var dist = Math.abs(lat - glat) + Math.abs(lon - glon);
+                
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = koppenGrid[i].koppen;
+                }
+            }
+            
+            if (minDist > 1.0) return null;
+            return nearest;
+        }
+        
+        map.on('click', function(e) {
+
+            if (!map.hasLayer(cityLayer)) {
+                return;  //do nothing if cities layer is off
+            }
+
+            var lat = e.latlng.lat;
+            var lon = e.latlng.lng;
+            
+            highlighted.forEach(m => map.removeLayer(m));
+            highlighted = [];
+            
+            var koppen = getKoppen(lat, lon);
+            
+            if (!koppen) {
+                L.popup()
+                    .setLatLng([lat, lon])
+                    .setContent('<b>Outside coverage area</b><br>Please click within the US.')
+                    .openOn(map);
+                return;
+            }
+            
+            var cityDist = cities.map(function(city) {
+                return {
+                    name: city.name,
+                    lat: city.lat,
+                    lon: city.lon,
+                    koppen: city.koppen,
+                    url1: city.url1,
+                    distance: haversineDistance(lat, lon, city.lat, city.lon),
+                    match: city.koppen === koppen
+                };
+            });
+            
+            cityDist.sort((a, b) => a.distance - b.distance);
+            var nearest = cityDist.slice(0, 3);
+            
+            nearest.forEach(function(city) {
+                var color;
+                if (city.match) {
+                    color = '#22c55e';
+                } else {
+                    color = '#3b82f6';
+                }
+                
+                var marker = L.circleMarker([city.lat, city.lon], {
+                    radius: 8,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+                highlighted.push(marker);
+            });
+            
+            var content = '<div style="min-width: 250px;">';
+            content += '<b>Nearest Cities</b><br>';
+            content += '<small>Clicked location: Köppen ' + koppen + '</small><br><br>';
+            
+            nearest.forEach(function(city) {
+                var note;
+                if (city.match) {
+                    note = ' <span style="color: green;">(same climate)</span>';
+                } else {
+                    note = ' <span style="color: #999;">(Köppen: ' + city.koppen + ')</span>';
+                }
+                
+                content += '&nbsp;&nbsp;&nbsp;' + '<b>' + city.name + '</b><br>';
+                content += '&nbsp;&nbsp;&nbsp;' + city.distance.toFixed(1) + ' miles' + note + '<br>';
+                content += '&nbsp;&nbsp;&nbsp;<a href="' + city.url1 + '" target="_blank">View Data</a><br><br>';
+            });
+            
+            content += '</div>';
+            
+            L.popup({maxWidth: 300, offset: [150, 0]})
+                .setLatLng([lat, lon])
+                .setContent(content)
+                .openOn(map);
+        });
+    </script>
+</body>
+</html>
