@@ -3,6 +3,7 @@
 import requests
 import csv
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -29,7 +30,20 @@ def fetch_with_retry(url, attempts=5, delay=5):
             time.sleep(delay)
     raise RuntimeError(f"Failed to fetch after {attempts} attempts: {url}")
 
-response = fetch_with_retry(GAUGES_URL)
+try:
+    response = fetch_with_retry(GAUGES_URL)
+except RuntimeError as e:
+    # If we can't reach the NWPS API after several attempts, don't
+    # cause the entire workflow to fail if an existing gauge list
+    # is already present. This allows the water pipeline to keep
+    # using the last known set of gauges during temporary outages.
+    print(str(e))
+    if os.path.exists(OUTPUT_CSV):
+        print(f"Warning: using existing gauge list at {OUTPUT_CSV} because NWPS API is unreachable.")
+        sys.exit(0)
+    else:
+        print("Error: no existing gauge list is available; exiting with failure.")
+        sys.exit(1)
 
 all_gauges_list = response.json().get("gauges", [])
 print(f"Total gauges returned: {len(all_gauges_list)}")
