@@ -3,11 +3,12 @@
 name: Daily Water Forecast Data
 
 on:
-  # Run once per day at 18:00 UTC, when NWPS stageflow
-  # forecasts are typically available with initial valid
-  # times near 18:00Z.
+  # Run once per day at 00:01 UTC. NWPS stageflow
+  # forecasts themselves are often initialized near 18:00 UTC,
+  # but this workflow snapshots whatever the API is serving at
+  # 00:01 UTC each day.
   schedule:
-    - cron: "0 18 * * *"
+    - cron: "1 0 * * *"
   workflow_dispatch:
 
 concurrency:

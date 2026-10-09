@@ -4,8 +4,8 @@ name: Daily Forecast Pipeline
 
 on:
   schedule:
-    # Run once per day at 00:00 UTC
-    - cron: "0 0 * * *"
+    # Run once per day at 00:01 UTC
+    - cron: "1 0 * * *"
   workflow_dispatch:
 
 concurrency:
