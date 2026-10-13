@@ -16,6 +16,6 @@ The software maintains a continuously updated U.S. archive of weather, water flo
 - Weather forecasts written under `data/weather/`.
 - River stage/flow forecasts written under `data/water/`.
 - CAISO 7-day load forecasts written under `data/electricity/`.
-- Interactive Leaflet map written to `data_locations.html`.
+- Interactive Leaflet map written to `data_locations.html` and published at [https://idaholabunsupported.github.io/weather-water-power-forecast/data_locations.html](https://idaholabunsupported.github.io/weather-water-power-forecast/data_locations.html).
 
-All data products are updated once per day by GitHub Actions, currently scheduled around **00:01 UTC**. For detailed data formats, timing, and example rows, see `data/README.md`.
+All data products are updated once per day by GitHub Actions, with data collection scheduled at midnight (00:00) UTC. For detailed data formats, timing, and example rows, see `data/README.md`.
